@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, Controls, Forms, StdCtrls, LazIDEIntf, IDEIntf,
   Graphics, Dialogs, SynEdit, SynEditTypes, {$IFDEF WINDOWS}Windows,{$ENDIF} CodeToolManager,
-  CodeTree, CodeCache, PascalParserTool, ComCtrls, MenuIntf, SrcEditorIntf;
+  CodeTree, CodeCache, PascalParserTool, ComCtrls, MenuIntf, SrcEditorIntf {$IFDEF LINUX}, Math {$ENDIF};
 
 procedure Register;
 
@@ -202,7 +202,7 @@ begin
     FLabel.Caption := 'Methods: ';
     FLabel.AutoSize := True;
     FLabel.Left := RightmostPos + 3;
-    FLabel.Top := 8;
+    FLabel.Top := 10;
     FLabel.Visible := True;
 
     FComboBox := TComboBox.Create(Toolbar);
