@@ -29,9 +29,6 @@
         <PackageName Value="IDEIntf"/>
       </Item>
       <Item>
-        <PackageName Value="LCLBase"/>
-      </Item>
-      <Item>
         <PackageName Value="FCL"/>
       </Item>
     </RequiredPkgs>
