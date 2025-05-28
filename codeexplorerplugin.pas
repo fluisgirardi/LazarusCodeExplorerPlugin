@@ -116,7 +116,6 @@ begin
     if FInitialized then
       Exit;
 
-    // Registrar eventos do SourceEditorManager
     SourceEditorManagerIntf.RegisterChangeEvent(semEditorCreate, @OnEditorOpened);
     SourceEditorManagerIntf.RegisterChangeEvent(semEditorDestroy, @OnEditorDestroy);
     SourceEditorManagerIntf.RegisterChangeEvent(semEditorActivate, @OnEditorActivated);
@@ -124,7 +123,6 @@ begin
     FInitialized := True;
     DebugLog('Events initialized successfully');
 
-    // Verificar se já existe um editor ativo
     FCurrentEditor := SourceEditorManagerIntf.ActiveEditor;
     if IsValidEditor(FCurrentEditor) then
     begin
@@ -144,7 +142,6 @@ var
   I: Integer;
 begin
   try
-    // Se já foi criado, não criar novamente
     if FComboCreated and (FComboBox <> nil) and (FComboBox.Parent <> nil) then
     begin
       DebugLog('Combo already exists, skipping creation');
@@ -153,7 +150,6 @@ begin
 
     DebugLog('CreateComboOnce - attempting to create combo');
 
-    // Encontrar a toolbar do editor atual
     Toolbar := FindEditorToolbar;
     if Toolbar = nil then
     begin
@@ -161,17 +157,14 @@ begin
       Exit;
     end;
 
-    // Destruir combo anterior se existir
     if FComboBox <> nil then
       DestroyCombo;
 
-    // Calcular posição à direita dos controles existentes
     RightmostPos := 10;
     for I := 0 to Toolbar.ControlCount - 1 do
       if Toolbar.Controls[I].Visible then
         RightmostPos := Max(RightmostPos, Toolbar.Controls[I].Left + Toolbar.Controls[I].Width + 5);
 
-    // Criar label
     FLabel := TLabel.Create(Toolbar);
     FLabel.Parent := Toolbar;
     FLabel.Caption := 'Methods: ';
@@ -180,7 +173,6 @@ begin
     FLabel.Top := 8;
     FLabel.Visible := True;
 
-    // Criar combobox
     FComboBox := TComboBox.Create(Toolbar);
     FComboBox.Parent := Toolbar;
     FComboBox.Width := 400;
@@ -214,7 +206,6 @@ begin
       Exit;
     end;
 
-    // Encontrar o form pai do editor
     ParentControl := FCurrentEditor.EditorControl.Parent;
     while (ParentControl <> nil) and not (ParentControl is TCustomForm) do
       ParentControl := ParentControl.Parent;
@@ -228,7 +219,6 @@ begin
     EditorForm := TCustomForm(ParentControl);
     DebugLog('Searching for toolbar in editor form: ' + EditorForm.Name);
 
-    // Procurar por toolbar no form do editor
     for i := 0 to EditorForm.ComponentCount - 1 do
     begin
       if (EditorForm.Components[i] is TToolBar) then
@@ -244,7 +234,6 @@ begin
       end;
     end;
 
-    // Se não encontrou, tentar criar uma
     if Result = nil then
     begin
       DebugLog('No suitable toolbar found, creating new one');
@@ -290,7 +279,6 @@ begin
     begin
       Line := FMethods[SelectedIndex - 1].Line;
 
-      // Obter o controle SynEdit
       if FCurrentEditor.EditorControl is TSynEdit then
       begin
         SynEdit := TSynEdit(FCurrentEditor.EditorControl);
@@ -320,7 +308,6 @@ begin
       Exit;
     FProcessing := True;
 
-    // Garantir que o combo existe
     if not FComboCreated then
       CreateComboOnce;
 
@@ -345,7 +332,6 @@ begin
     FileName := GetCurrentFileName;
     DebugLog('Updating methods for: ' + ExtractFileName(FileName));
 
-    // Verificar se é um arquivo Pascal
     if not (LowerCase(ExtractFileExt(FileName)) = '.pas') then
     begin
       FComboBox.Items[0] := '(Not Pascal file)';
@@ -354,7 +340,6 @@ begin
       Exit;
     end;
 
-    // Obter o buffer de código
     CodeBuffer := CodeToolBoss.FindFile(FileName);
     if CodeBuffer = nil then
     begin
@@ -365,7 +350,6 @@ begin
       Exit;
     end;
 
-    // Obter a ferramenta de análise
     if not CodeToolBoss.Explore(CodeBuffer, Tool, False) then
     begin
       DebugLog('Failed to explore code for: ' + FileName);
@@ -375,7 +359,6 @@ begin
       Exit;
     end;
 
-    // Procurar por procedimentos e funções
     Node := Tool.Tree.Root;
     while Node <> nil do
     begin
@@ -440,7 +423,6 @@ begin
 
     DebugLog('OnEditorOpened: ' + ExtractFileName(NewEditor.FileName));
 
-    // Se ainda não temos combo, criar agora
     if not FComboCreated then
     begin
       FCurrentEditor := NewEditor;
@@ -457,7 +439,6 @@ procedure TCodeAnalyzerPlugin.OnEditorDestroy(Sender: TObject);
 begin
   try
     DebugLog('OnEditorDestroy called');
-    // Não fazer nada específico aqui, o combo deve permanecer para outros editores
   except
     on E: Exception do
       DebugLog('Error in OnEditorDestroy: ' + E.Message);
@@ -471,7 +452,6 @@ begin
   try
     NewEditor := SourceEditorManagerIntf.ActiveEditor;
 
-    // Só atualizar se realmente mudou de editor
     if NewEditor <> FCurrentEditor then
     begin
       FCurrentEditor := NewEditor;
@@ -479,7 +459,6 @@ begin
       begin
         DebugLog('OnEditorActivated: ' + ExtractFileName(FCurrentEditor.FileName));
 
-        // Se não temos combo ainda, criar
         if not FComboCreated then
           CreateComboOnce;
 
@@ -502,7 +481,6 @@ begin
   end;
 end;
 
-// Função de registro do plugin
 procedure Register;
 begin
   try
