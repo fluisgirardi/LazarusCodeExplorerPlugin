@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SysUtils, Controls, Forms, StdCtrls, LazIDEIntf, IDEIntf,
-  Graphics, Dialogs, SynEdit, {$IFDEF WINDOWS}Windows,{$ENDIF} CodeToolManager,
+  Graphics, Dialogs, SynEdit, SynEditTypes, {$IFDEF WINDOWS}Windows,{$ENDIF} CodeToolManager,
   CodeTree, CodeCache, PascalParserTool, ComCtrls, MenuIntf, SrcEditorIntf;
 
 procedure Register;
@@ -17,6 +17,8 @@ type
   TMethodInfo = record
     Name: string;
     Line: Integer;
+    StartPos: Integer;
+    EndPos: Integer;
   end;
 
   TCodeAnalyzerPlugin = class
@@ -28,18 +30,24 @@ type
     FInitialized: Boolean;
     FComboCreated: Boolean;
     FProcessing: Boolean;
+    FUpdatingCombo: Boolean; // Flag para evitar loop infinito
+    FLastCursorLine: Integer; // Para otimizar verificações
     procedure CreateComboOnce;
     procedure ComboBoxChange(Sender: TObject);
     procedure UpdateMethods;
     procedure OnEditorOpened(Sender: TObject);
     procedure OnEditorDestroy(Sender: TObject);
     procedure OnEditorActivated(Sender: TObject);
+    procedure OnCursorPosChanged(Sender: TObject; Changes: TSynStatusChanges); // Novo evento
     procedure InitializeEvents;
     function PositionToLine(Buffer: TCodeBuffer; Position: Integer): Integer;
     function FindEditorToolbar: TToolBar;
     function GetCurrentFileName: string;
     procedure DestroyCombo;
     function IsValidEditor(AEditor: TSourceEditorInterface): Boolean;
+    procedure UpdateComboSelection; // Novo método
+    function GetCurrentMethodIndex: Integer; // Novo método
+    procedure SetupCursorChangeEvent; // Novo método
   public
     constructor Create;
     destructor Destroy; override;
@@ -65,6 +73,8 @@ begin
   FInitialized := False;
   FComboCreated := False;
   FProcessing := False;
+  FUpdatingCombo := False;
+  FLastCursorLine := -1;
   FCurrentEditor := nil;
   FComboBox := nil;
   FLabel := nil;
@@ -110,6 +120,29 @@ begin
             (AEditor.FileName <> '');
 end;
 
+procedure TCodeAnalyzerPlugin.SetupCursorChangeEvent;
+var
+  SynEdit: TSynEdit;
+begin
+  try
+    if not IsValidEditor(FCurrentEditor) then
+      Exit;
+
+    if FCurrentEditor.EditorControl is TSynEdit then
+    begin
+      SynEdit := TSynEdit(FCurrentEditor.EditorControl);
+      // Remove evento anterior se existir
+      SynEdit.OnStatusChange := nil;
+      // Adiciona novo evento
+      SynEdit.OnStatusChange := @OnCursorPosChanged;
+      DebugLog('Cursor change event configured for editor');
+    end;
+  except
+    on E: Exception do
+      DebugLog('Error in SetupCursorChangeEvent: ' + E.Message);
+  end;
+end;
+
 procedure TCodeAnalyzerPlugin.InitializeEvents;
 begin
   try
@@ -128,6 +161,7 @@ begin
     begin
       CreateComboOnce;
       UpdateMethods;
+      SetupCursorChangeEvent;
     end;
   except
     on E: Exception do
@@ -228,7 +262,6 @@ begin
                  ', Visible: ' + BoolToStr(Result.Visible, True) +
                  ', Height: ' + IntToStr(Result.Height));
 
-        // Usar a primeira toolbar visível encontrada
         if Result.Visible and (Result.Height > 0) then
           Exit;
       end;
@@ -271,6 +304,9 @@ var
   SynEdit: TSynEdit;
 begin
   try
+    if FUpdatingCombo then
+      Exit; // Evita loop quando atualizamos o combo programaticamente
+
     if (FComboBox = nil) or not IsValidEditor(FCurrentEditor) then
       Exit;
 
@@ -285,12 +321,115 @@ begin
         SynEdit.CaretY := Line;
         SynEdit.TopLine := Max(1, Line - 5);
         SynEdit.SetFocus;
+        FLastCursorLine := Line; // Atualiza a linha atual
         DebugLog('Jumped to method: ' + FMethods[SelectedIndex - 1].Name + ' at line ' + IntToStr(Line));
       end;
     end;
   except
     on E: Exception do
       DebugLog('Error in ComboBoxChange: ' + E.Message);
+  end;
+end;
+
+function TCodeAnalyzerPlugin.GetCurrentMethodIndex: Integer;
+var
+  CurrentLine: Integer;
+  SynEdit: TSynEdit;
+  i: Integer;
+  BestMatch: Integer;
+begin
+  Result := -1;
+  BestMatch := -1;
+
+  try
+    if not IsValidEditor(FCurrentEditor) then
+      Exit;
+
+    if not (FCurrentEditor.EditorControl is TSynEdit) then
+      Exit;
+
+    SynEdit := TSynEdit(FCurrentEditor.EditorControl);
+    CurrentLine := SynEdit.CaretY;
+
+    // Procura o método que contém a linha atual
+    for i := 0 to High(FMethods) do
+    begin
+      // Se a linha atual está dentro do range do método
+      if (CurrentLine >= FMethods[i].Line) then
+      begin
+        // Se é o primeiro método encontrado ou está mais próximo
+        if (BestMatch = -1) or (FMethods[i].Line > FMethods[BestMatch].Line) then
+          BestMatch := i;
+      end;
+    end;
+
+    Result := BestMatch;
+  except
+    on E: Exception do
+      DebugLog('Error in GetCurrentMethodIndex: ' + E.Message);
+  end;
+end;
+
+procedure TCodeAnalyzerPlugin.UpdateComboSelection;
+var
+  CurrentMethodIndex: Integer;
+  ComboIndex: Integer;
+begin
+  try
+    if FUpdatingCombo or (FComboBox = nil) then
+      Exit;
+
+    CurrentMethodIndex := GetCurrentMethodIndex;
+
+    if CurrentMethodIndex >= 0 then
+      ComboIndex := CurrentMethodIndex + 1 // +1 porque o primeiro item é "(Select method)"
+    else
+      ComboIndex := 0; // Seleciona "(Select method)"
+
+    if (ComboIndex >= 0) and (ComboIndex < FComboBox.Items.Count) and
+       (FComboBox.ItemIndex <> ComboIndex) then
+    begin
+      FUpdatingCombo := True;
+      try
+        FComboBox.ItemIndex := ComboIndex;
+        if CurrentMethodIndex >= 0 then
+          DebugLog('Auto-selected method: ' + FMethods[CurrentMethodIndex].Name)
+        else
+          DebugLog('No method selected - cursor outside methods');
+      finally
+        FUpdatingCombo := False;
+      end;
+    end;
+  except
+    on E: Exception do
+      DebugLog('Error in UpdateComboSelection: ' + E.Message);
+  end;
+end;
+
+procedure TCodeAnalyzerPlugin.OnCursorPosChanged(Sender: TObject; Changes: TSynStatusChanges);
+var
+  SynEdit: TSynEdit;
+  CurrentLine: Integer;
+begin
+  try
+    if not IsValidEditor(FCurrentEditor) then
+      Exit;
+
+    if not (FCurrentEditor.EditorControl is TSynEdit) then
+      Exit;
+
+    SynEdit := TSynEdit(FCurrentEditor.EditorControl);
+    CurrentLine := SynEdit.CaretY;
+
+    // Só atualiza se a linha mudou (otimização)
+    if CurrentLine <> FLastCursorLine then
+    begin
+      FLastCursorLine := CurrentLine;
+      UpdateComboSelection;
+    end;
+  except
+    on E: Exception do
+      DebugLog('Error in OnCursorPosChanged: ' + E.Message);
   end;
 end;
 
@@ -372,6 +511,8 @@ begin
           SetLength(FMethods, Length(FMethods) + 1);
           FMethods[High(FMethods)].Name := aMethodName;
           FMethods[High(FMethods)].Line := Line;
+          FMethods[High(FMethods)].StartPos := Node.StartPos;
+          FMethods[High(FMethods)].EndPos := Node.EndPos;
           FComboBox.Items.Add(aMethodName);
         end;
       end;
@@ -384,6 +525,10 @@ begin
       FComboBox.Items[0] := '(Select method - ' + IntToStr(Length(FMethods)) + ' found)';
 
     FComboBox.ItemIndex := 0;
+
+    // Atualiza a seleção do combo baseada na posição atual do cursor
+    UpdateComboSelection;
+
     DebugLog('UpdateMethods completed. Found ' + IntToStr(Length(FMethods)) + ' methods');
     FProcessing := False;
   except
@@ -428,6 +573,7 @@ begin
       FCurrentEditor := NewEditor;
       CreateComboOnce;
       UpdateMethods;
+      SetupCursorChangeEvent;
     end;
   except
     on E: Exception do
@@ -463,6 +609,7 @@ begin
           CreateComboOnce;
 
         UpdateMethods;
+        SetupCursorChangeEvent; // Configura evento para o novo editor
       end
       else
       begin
