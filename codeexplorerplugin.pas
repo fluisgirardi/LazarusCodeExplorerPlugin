@@ -591,6 +591,8 @@ begin
     for aMethodName in FStoredMethods do
       FComboBox.Items.Add(aMethodName);
 
+    FComboBox.DropDownCount:= FComboBox.Items.Count;
+
     if FStoredMethods.Count = 0 then
       FComboBox.Items[0] := '(No methods found)';
 
