@@ -21,11 +21,14 @@ type
     EndPos: Integer;
   end;
 
+  { TCodeAnalyzerPlugin }
+
   TCodeAnalyzerPlugin = class
   private
     FComboBox: TComboBox;
     FLabel: TLabel;
     FMethods: array of TMethodInfo;
+    FStoredMethods: TStringList;
     FCurrentEditor: TSourceEditorInterface;
     FInitialized: Boolean;
     FComboCreated: Boolean;
@@ -48,6 +51,7 @@ type
     procedure UpdateComboSelection;
     function GetCurrentMethodIndex: Integer;
     procedure SetupCursorChangeEvent;
+    procedure FilterMethods(const SearchText: string);
   public
     constructor Create;
     destructor Destroy; override;
@@ -78,6 +82,7 @@ begin
   FCurrentEditor := nil;
   FComboBox := nil;
   FLabel := nil;
+  FStoredMethods := TStringList.Create;
   InitializeEvents;
   DebugLog('TCodeAnalyzerPlugin created');
 end;
@@ -87,6 +92,7 @@ begin
   try
     DebugLog('TCodeAnalyzerPlugin.Destroy');
     DestroyCombo;
+    FStoredMethods.Free;
     DebugLog('TCodeAnalyzerPlugin destroyed');
   except
     on E: Exception do
@@ -94,6 +100,7 @@ begin
   end;
   inherited Destroy;
 end;
+
 
 procedure TCodeAnalyzerPlugin.DestroyCombo;
 begin
@@ -138,6 +145,49 @@ begin
   except
     on E: Exception do
       DebugLog('Error in SetupCursorChangeEvent: ' + E.Message);
+  end;
+end;
+
+procedure TCodeAnalyzerPlugin.FilterMethods(const SearchText: string);
+var
+  I: Integer;
+  LowerSearchText: string;
+  CurrentText: string;
+begin
+  try
+    LowerSearchText := LowerCase(SearchText);
+    CurrentText := FComboBox.Text;
+
+    FComboBox.Items.BeginUpdate;
+    try
+      FComboBox.Items.Clear;
+      FComboBox.Items.Add('(Select method - ' + IntToStr(FStoredMethods.Count) + ' found)');
+
+      if LowerSearchText = '' then
+      begin
+        for I := 0 to FStoredMethods.Count - 1 do
+          FComboBox.Items.Add(FStoredMethods[I]);
+      end
+      else
+      begin
+        for I := 0 to FStoredMethods.Count - 1 do
+        begin
+          if Pos(LowerSearchText, LowerCase(FStoredMethods[I])) > 0 then
+            FComboBox.Items.Add(FStoredMethods[I]);
+        end;
+        if FComboBox.Items.Count = 1 then
+          FComboBox.Items[0] := '(No matching methods)';
+      end;
+
+      FComboBox.Text := CurrentText;
+      if FComboBox.Items.Count > 1 then
+        FComboBox.DroppedDown := True;
+    finally
+      FComboBox.Items.EndUpdate;
+    end;
+  except
+    on E: Exception do
+      DebugLog('Error in FilterMethods: ' + E.Message);
   end;
 end;
 
@@ -208,12 +258,13 @@ begin
     FComboBox := TComboBox.Create(Toolbar);
     FComboBox.Parent := Toolbar;
     FComboBox.Width := 400;
-    FComboBox.Style := csDropDownList;
+    FComboBox.Style := csDropDown;
+    FComboBox.AutoComplete := False;
     FComboBox.OnChange := @ComboBoxChange;
     FComboBox.Left := FLabel.Left + FLabel.Width + 5;
     FComboBox.Top := 3;
     FComboBox.Visible := True;
-    FComboBox.Items.Add('(No methods)');
+    FComboBox.Items.Add('(Select method)');
     FComboBox.ItemIndex := 0;
 
     FComboCreated := True;
@@ -300,27 +351,50 @@ var
   SelectedIndex: Integer;
   Line: Integer;
   SynEdit: TSynEdit;
+  SearchText: string;
+  SelectedMethod: string;
+  I: Integer;
 begin
   try
-    if FUpdatingCombo then
+    if FUpdatingCombo or (FComboBox = nil) or not IsValidEditor(FCurrentEditor) then
       Exit;
 
-    if (FComboBox = nil) or not IsValidEditor(FCurrentEditor) then
-      Exit;
-
+    SearchText := FComboBox.Text;
     SelectedIndex := FComboBox.ItemIndex;
-    if (SelectedIndex > 0) and (SelectedIndex <= Length(FMethods)) then
-    begin
-      Line := FMethods[SelectedIndex - 1].Line;
 
-      if FCurrentEditor.EditorControl is TSynEdit then
+    if (SearchText <> '') and (SelectedIndex = -1) then
+    begin
+      FilterMethods(SearchText);
+      Exit;
+    end;
+
+    if SearchText = '' then
+    begin
+      FilterMethods('');
+      FComboBox.ItemIndex := 0;
+      Exit;
+    end;
+
+    if (SelectedIndex > 0) and (SelectedIndex < FComboBox.Items.Count) then
+    begin
+      SelectedMethod := FComboBox.Items[SelectedIndex];
+
+      for I := 0 to High(FMethods) do
       begin
-        SynEdit := TSynEdit(FCurrentEditor.EditorControl);
-        SynEdit.CaretY := Line;
-        SynEdit.TopLine := Max(1, Line - 5);
-        SynEdit.SetFocus;
-        FLastCursorLine := Line;
-        DebugLog('Jumped to method: ' + FMethods[SelectedIndex - 1].Name + ' at line ' + IntToStr(Line));
+        if FMethods[I].Name = SelectedMethod then
+        begin
+          Line := FMethods[I].Line;
+          if FCurrentEditor.EditorControl is TSynEdit then
+          begin
+            SynEdit := TSynEdit(FCurrentEditor.EditorControl);
+            SynEdit.CaretY := Line;
+            SynEdit.TopLine := Max(1, Line - 5);
+            SynEdit.SetFocus;
+            FLastCursorLine := Line;
+            DebugLog('Jumped to method: ' + FMethods[I].Name + ' at line ' + IntToStr(Line));
+          end;
+          Break;
+        end;
       end;
     end;
   except
@@ -451,12 +525,12 @@ begin
     end;
 
     FComboBox.Items.Clear;
-    FComboBox.Items.Add('(Select method)');
+    FStoredMethods.Clear;
     SetLength(FMethods, 0);
 
     if not IsValidEditor(FCurrentEditor) then
     begin
-      FComboBox.Items[0] := '(No editor)';
+      FComboBox.Items.Add('(No editor)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
       Exit;
@@ -467,7 +541,7 @@ begin
 
     if not (LowerCase(ExtractFileExt(FileName)) = '.pas') then
     begin
-      FComboBox.Items[0] := '(Not Pascal file)';
+      FComboBox.Items.Add('(Not Pascal file)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
       Exit;
@@ -477,7 +551,7 @@ begin
     if CodeBuffer = nil then
     begin
       DebugLog('CodeBuffer not found for: ' + FileName);
-      FComboBox.Items[0] := '(Parse error)';
+      FComboBox.Items.Add('(Parse error)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
       Exit;
@@ -486,7 +560,7 @@ begin
     if not CodeToolBoss.Explore(CodeBuffer, Tool, False) then
     begin
       DebugLog('Failed to explore code for: ' + FileName);
-      FComboBox.Items[0] := '(Analysis failed)';
+      FComboBox.Items.Add('(Analysis failed)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
       Exit;
@@ -507,22 +581,24 @@ begin
           FMethods[High(FMethods)].Line := Line;
           FMethods[High(FMethods)].StartPos := Node.StartPos;
           FMethods[High(FMethods)].EndPos := Node.EndPos;
-          FComboBox.Items.Add(aMethodName);
+          FStoredMethods.Add(aMethodName);
         end;
       end;
       Node := Node.Next;
     end;
 
-    if Length(FMethods) = 0 then
-      FComboBox.Items[0] := '(No methods found)'
-    else
-      FComboBox.Items[0] := '(Select method - ' + IntToStr(Length(FMethods)) + ' found)';
+    FComboBox.Items.Add('(Select method - ' + IntToStr(FStoredMethods.Count) + ' found)');
+    for aMethodName in FStoredMethods do
+      FComboBox.Items.Add(aMethodName);
+
+    if FStoredMethods.Count = 0 then
+      FComboBox.Items[0] := '(No methods found)';
 
     FComboBox.ItemIndex := 0;
 
     UpdateComboSelection;
 
-    DebugLog('UpdateMethods completed. Found ' + IntToStr(Length(FMethods)) + ' methods');
+    DebugLog('UpdateMethods completed. Found ' + IntToStr(FStoredMethods.Count) + ' methods');
     FProcessing := False;
   except
     on E: Exception do
