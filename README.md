@@ -58,5 +58,5 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ---
 
 <p align="center">
-  <b>Developed by <a href="https://github.com/anderbelluno">Ander Belluno</a></b>
+  <b>Developed by <a href="https://github.com/anderbelluno">Anderson Fiori</a></b>
 </p>
