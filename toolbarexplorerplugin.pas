@@ -5,9 +5,10 @@ unit ToolbarExplorerPlugin;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, StdCtrls, LazIDEIntf, IDEIntf, LazLoggerBase,
-  Graphics, Dialogs, SynEdit, SynEditTypes, CodeToolManager,
-  CodeTree, CodeCache, PascalParserTool, ComCtrls, MenuIntf, SrcEditorIntf, Math;
+  Classes, SysUtils, Controls, Forms, StdCtrls, ExtCtrls, ComCtrls,
+  LazIDEIntf, IDEIntf, LazLoggerBase, Graphics, Dialogs, SynEdit, SynEditTypes,
+  CodeToolManager, CodeTree, CodeCache, PascalParserTool, MenuIntf,
+  SrcEditorIntf, Math;
 
 procedure Register;
 
@@ -27,6 +28,7 @@ type
   private
     FComboBox: TComboBox;
     FLabel: TLabel;
+    FPanel: TPanel;
     FMethods: array of TMethodInfo;
     FStoredMethods: TStringList;
     FCurrentEditor: TSourceEditorInterface;
@@ -101,8 +103,8 @@ begin
       FComboBox.OnChange := nil;
       FreeAndNil(FComboBox);
     end;
-    if FLabel <> nil then
-      FreeAndNil(FLabel);
+    FreeAndNil(FLabel);
+    FreeAndNil(FPanel);
     FComboCreated := False;
     DebugLn('[TCodeAnalyzerPlugin] Combo destroyed');
   except
@@ -211,7 +213,7 @@ end;
 procedure TCodeAnalyzerPlugin.CreateComboOnce;
 var
   Toolbar: TToolBar;
-  RightmostPos: Integer;
+  //RightmostPos: Integer;
   I: Integer;
 begin
   try
@@ -233,30 +235,46 @@ begin
     if FComboBox <> nil then
       DestroyCombo;
 
+    { wp: better to have the combobox at the left side of the toolbar because
+      this is where it moves when new buttons are added to the editor toolbar.
+
     RightmostPos := 10;
     for I := 0 to Toolbar.ControlCount - 1 do
       if Toolbar.Controls[I].Visible then
         RightmostPos := Max(RightmostPos, Toolbar.Controls[I].Left + Toolbar.Controls[I].Width + 5);
+      }
+
+    FPanel := TPanel.Create(Toolbar);
+    FPanel.Parent := Toolbar;
+    FPanel.Caption := '';
+    FPanel.BevelOuter := bvNone;
+    FPanel.Left := 8;  //RightmostPos + 3;
 
     FLabel := TLabel.Create(Toolbar);
-    FLabel.Parent := Toolbar;
+    FLabel.Parent := FPanel;
     FLabel.Caption := 'Methods: ';
     FLabel.AutoSize := True;
-    FLabel.Left := RightmostPos + 3;
-    FLabel.Top := 10;
-    FLabel.Visible := True;
+    FLabel.Align := alLeft;
+    FLabel.Layout := tlCenter;
+    FLabel.BorderSpacing.Left := 3;
+    FLabel.BorderSpacing.Right := 4;
 
     FComboBox := TComboBox.Create(Toolbar);
-    FComboBox.Parent := Toolbar;
-    FComboBox.Width := 400;
+    FComboBox.Parent := FPanel;
     FComboBox.Style := csDropDown;
     FComboBox.AutoComplete := False;
     FComboBox.OnChange := @ComboBoxChange;
-    FComboBox.Left := FLabel.Left + FLabel.Width + 5;
-    FComboBox.Top := 3;
-    FComboBox.Visible := True;
+    FComboBox.AnchorSideLeft.Control := Flabel;
+    FCombobox.AnchorSideLeft.Side := asrRight;
+    FCombobox.AnchorSideRight.Control := FPanel;
+    FCombobox.AnchorSideRight.Side := asrRight;
+    FCombobox.AnchorSideTop.Control := FPanel;
+    FCombobox.AnchorSideTop.Side := asrCenter;
+    FComboBox.Constraints.MinWidth := 400;
     FComboBox.Items.Add('(Select method)');
     FComboBox.ItemIndex := 0;
+
+    FPanel.AutoSize := true;
 
     FComboCreated := True;
     DebugLn('[TCodeAnalyzerPlugin] Combo created successfully at position: ' + IntToStr(FComboBox.Left));
