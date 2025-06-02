@@ -4,6 +4,7 @@
     <PathDelim Value="\"/>
     <Name Value="codetoolbarexplorer"/>
     <Type Value="RunAndDesignTime"/>
+    <Author Value="Anderson Fiori"/>
     <CompilerOptions>
       <Version Value="11"/>
       <PathDelim Value="\"/>
@@ -11,6 +12,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
+    <License Value="MIT License"/>
     <Files>
       <Item>
         <Filename Value="toolbarexplorerplugin.pas"/>
