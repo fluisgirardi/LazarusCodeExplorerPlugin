@@ -2,7 +2,7 @@
 <CONFIG>
   <Package Version="5">
     <PathDelim Value="\"/>
-    <Name Value="CodeExplorerCombo"/>
+    <Name Value="codetoolbarexplorer"/>
     <Type Value="RunAndDesignTime"/>
     <CompilerOptions>
       <Version Value="11"/>
@@ -13,17 +13,17 @@
     </CompilerOptions>
     <Files>
       <Item>
-        <Filename Value="codeexplorerplugin.pas"/>
+        <Filename Value="toolbarexplorerplugin.pas"/>
         <HasRegisterProc Value="True"/>
-        <UnitName Value="CodeExplorerPlugin"/>
+        <UnitName Value="toolbarexplorerplugin"/>
       </Item>
     </Files>
     <RequiredPkgs>
       <Item>
-        <PackageName Value="SynEdit"/>
+        <PackageName Value="CodeTools"/>
       </Item>
       <Item>
-        <PackageName Value="CodeTools"/>
+        <PackageName Value="SynEdit"/>
       </Item>
       <Item>
         <PackageName Value="IDEIntf"/>

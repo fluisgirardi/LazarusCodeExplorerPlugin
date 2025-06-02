@@ -1,4 +1,4 @@
-unit CodeExplorerPlugin;
+unit ToolbarExplorerPlugin;
 
 {$mode objfpc}{$H+}
 
@@ -718,3 +718,4 @@ finalization
     FreeAndNil(aCodeAnalyzerPlugin);
 
 end.
+

@@ -2,21 +2,21 @@
   This source is only used to compile and install the package.
  }
 
-unit CodeExplorerCombo;
+unit codetoolbarexplorer;
 
 {$warn 5023 off : no warning about unused units}
 interface
 
 uses
-    CodeExplorerPlugin, LazarusPackageIntf;
+    ToolbarExplorerPlugin, LazarusPackageIntf;
 
 implementation
 
 procedure Register;
 begin
-  RegisterUnit('CodeExplorerPlugin', @CodeExplorerPlugin.Register);
+  RegisterUnit('ToolbarExplorerPlugin', @ToolbarExplorerPlugin.Register);
 end;
 
 initialization
-  RegisterPackage('CodeExplorerCombo', @Register);
+  RegisterPackage('codetoolbarexplorer', @Register);
 end.
