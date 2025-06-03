@@ -5,9 +5,10 @@ unit ToolbarExplorerPlugin;
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, StdCtrls, LazIDEIntf, IDEIntf,
-  Graphics, Dialogs, SynEdit, SynEditTypes, {$IFDEF WINDOWS}Windows,{$ENDIF} CodeToolManager,
-  CodeTree, CodeCache, PascalParserTool, ComCtrls, MenuIntf, SrcEditorIntf {$IFDEF LINUX}, Math {$ENDIF};
+  Classes, SysUtils, Controls, Forms, StdCtrls, ExtCtrls, ComCtrls,
+  LazIDEIntf, IDEIntf, LazLoggerBase, Graphics, Dialogs, SynEdit, SynEditTypes,
+  CodeToolManager, CodeTree, CodeCache, PascalParserTool, MenuIntf,
+  SrcEditorIntf, Math;
 
 procedure Register;
 
@@ -27,6 +28,7 @@ type
   private
     FComboBox: TComboBox;
     FLabel: TLabel;
+    FPanel: TPanel;
     FMethods: array of TMethodInfo;
     FStoredMethods: TStringList;
     FCurrentEditor: TSourceEditorInterface;
@@ -60,15 +62,6 @@ type
 var
   aCodeAnalyzerPlugin: TCodeAnalyzerPlugin;
 
-procedure DebugLog(const Msg: string);
-begin
-  {$IFDEF WINDOWS}
-  OutputDebugString(PChar('CodeAnalyzerPlugin: ' + Msg));
-  {$ELSE}
-  WriteLn('CodeAnalyzerPlugin: ' + Msg);
-  {$ENDIF}
-end;
-
 { TCodeAnalyzerPlugin }
 
 constructor TCodeAnalyzerPlugin.Create;
@@ -84,19 +77,19 @@ begin
   FLabel := nil;
   FStoredMethods := TStringList.Create;
   InitializeEvents;
-  DebugLog('TCodeAnalyzerPlugin created');
+  DebugLn('[TCodeAnalyzerPlugin] Created');
 end;
 
 destructor TCodeAnalyzerPlugin.Destroy;
 begin
   try
-    DebugLog('TCodeAnalyzerPlugin.Destroy');
+    DebugLn('[TCodeAnalyzerPlugin] Destroy');
     DestroyCombo;
     FStoredMethods.Free;
-    DebugLog('TCodeAnalyzerPlugin destroyed');
+    DebugLn('[TCodeAnalyzerPlugin] Destroyed');
   except
     on E: Exception do
-      DebugLog('Error in TCodeAnalyzerPlugin.Destroy: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error: ' + E.Message);
   end;
   inherited Destroy;
 end;
@@ -110,13 +103,13 @@ begin
       FComboBox.OnChange := nil;
       FreeAndNil(FComboBox);
     end;
-    if FLabel <> nil then
-      FreeAndNil(FLabel);
+    FreeAndNil(FLabel);
+    FreeAndNil(FPanel);
     FComboCreated := False;
-    DebugLog('Combo destroyed');
+    DebugLn('[TCodeAnalyzerPlugin] Combo destroyed');
   except
     on E: Exception do
-      DebugLog('Error in DestroyCombo: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in DestroyCombo: ' + E.Message);
   end;
 end;
 
@@ -140,11 +133,11 @@ begin
       SynEdit := TSynEdit(FCurrentEditor.EditorControl);
       SynEdit.OnStatusChange := nil;
       SynEdit.OnStatusChange := @OnCursorPosChanged;
-      DebugLog('Cursor change event configured for editor');
+      DebugLn('[TCodeAnalyzerPlugin] Cursor change event configured for editor');
     end;
   except
     on E: Exception do
-      DebugLog('Error in SetupCursorChangeEvent: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in SetupCursorChangeEvent: ' + E.Message);
   end;
 end;
 
@@ -187,7 +180,7 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in FilterMethods: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in FilterMethods: ' + E.Message);
   end;
 end;
 
@@ -202,7 +195,7 @@ begin
     SourceEditorManagerIntf.RegisterChangeEvent(semEditorActivate, @OnEditorActivated);
 
     FInitialized := True;
-    DebugLog('Events initialized successfully');
+    DebugLn('[TCodeAnalyzerPlugin] Events initialized successfully');
 
     FCurrentEditor := SourceEditorManagerIntf.ActiveEditor;
     if IsValidEditor(FCurrentEditor) then
@@ -213,65 +206,81 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error initializing events: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error initializing events: ' + E.Message);
   end;
 end;
 
 procedure TCodeAnalyzerPlugin.CreateComboOnce;
 var
   Toolbar: TToolBar;
-  RightmostPos: Integer;
+  //RightmostPos: Integer;
   I: Integer;
 begin
   try
     if FComboCreated and (FComboBox <> nil) and (FComboBox.Parent <> nil) then
     begin
-      DebugLog('Combo already exists, skipping creation');
+      DebugLn('[TCodeAnalyzerPlugin] Combo already exists, skipping creation');
       Exit;
     end;
 
-    DebugLog('CreateComboOnce - attempting to create combo');
+    DebugLn('[TCodeAnalyzerPlugin] CreateComboOnce - attempting to create combo');
 
     Toolbar := FindEditorToolbar;
     if Toolbar = nil then
     begin
-      DebugLog('No toolbar found, cannot create combo');
+      DebugLn('[TCodeAnalyzerPlugin] No toolbar found, cannot create combo');
       Exit;
     end;
 
     if FComboBox <> nil then
       DestroyCombo;
 
+    { wp: better to have the combobox at the left side of the toolbar because
+      this is where it moves when new buttons are added to the editor toolbar.
+
     RightmostPos := 10;
     for I := 0 to Toolbar.ControlCount - 1 do
       if Toolbar.Controls[I].Visible then
         RightmostPos := Max(RightmostPos, Toolbar.Controls[I].Left + Toolbar.Controls[I].Width + 5);
+      }
+
+    FPanel := TPanel.Create(Toolbar);
+    FPanel.Parent := Toolbar;
+    FPanel.Caption := '';
+    FPanel.BevelOuter := bvNone;
+    FPanel.Left := 8;  //RightmostPos + 3;
 
     FLabel := TLabel.Create(Toolbar);
-    FLabel.Parent := Toolbar;
+    FLabel.Parent := FPanel;
     FLabel.Caption := 'Methods: ';
     FLabel.AutoSize := True;
-    FLabel.Left := RightmostPos + 3;
-    FLabel.Top := 10;
-    FLabel.Visible := True;
+    FLabel.Align := alLeft;
+    FLabel.Layout := tlCenter;
+    FLabel.BorderSpacing.Left := 3;
+    FLabel.BorderSpacing.Right := 4;
 
     FComboBox := TComboBox.Create(Toolbar);
-    FComboBox.Parent := Toolbar;
-    FComboBox.Width := 400;
+    FComboBox.Parent := FPanel;
     FComboBox.Style := csDropDown;
     FComboBox.AutoComplete := False;
     FComboBox.OnChange := @ComboBoxChange;
-    FComboBox.Left := FLabel.Left + FLabel.Width + 5;
-    FComboBox.Top := 3;
-    FComboBox.Visible := True;
+    FComboBox.AnchorSideLeft.Control := Flabel;
+    FCombobox.AnchorSideLeft.Side := asrRight;
+    FCombobox.AnchorSideRight.Control := FPanel;
+    FCombobox.AnchorSideRight.Side := asrRight;
+    FCombobox.AnchorSideTop.Control := FPanel;
+    FCombobox.AnchorSideTop.Side := asrCenter;
+    FComboBox.Constraints.MinWidth := 400;
     FComboBox.Items.Add('(Select method)');
     FComboBox.ItemIndex := 0;
 
+    FPanel.AutoSize := true;
+
     FComboCreated := True;
-    DebugLog('Combo created successfully at position: ' + IntToStr(FComboBox.Left));
+    DebugLn('[TCodeAnalyzerPlugin] Combo created successfully at position: ' + IntToStr(FComboBox.Left));
   except
     on E: Exception do
-      DebugLog('Error in CreateComboOnce: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in CreateComboOnce: ' + E.Message);
   end;
 end;
 
@@ -285,7 +294,7 @@ begin
   try
     if not IsValidEditor(FCurrentEditor) then
     begin
-      DebugLog('No valid current editor');
+      DebugLn('[TCodeAnalyzerPlugin] No valid current editor');
       Exit;
     end;
 
@@ -295,21 +304,21 @@ begin
 
     if not (ParentControl is TCustomForm) then
     begin
-      DebugLog('No parent form found for editor');
+      DebugLn('[TCodeAnalyzerPlugin] No parent form found for editor');
       Exit;
     end;
 
     EditorForm := TCustomForm(ParentControl);
-    DebugLog('Searching for toolbar in editor form: ' + EditorForm.Name);
+    DebugLn('[TCodeAnalyzerPlugin] Searching for toolbar in editor form: ' + EditorForm.Name);
 
     for i := 0 to EditorForm.ComponentCount - 1 do
     begin
       if (EditorForm.Components[i] is TToolBar) then
       begin
         Result := TToolBar(EditorForm.Components[i]);
-        DebugLog('Found toolbar: ' + Result.Name +
-                 ', Visible: ' + BoolToStr(Result.Visible, True) +
-                 ', Height: ' + IntToStr(Result.Height));
+        DebugLn('[TCodeAnalyzerPlugin] Found toolbar: ' + Result.Name +
+                ', Visible: ' + BoolToStr(Result.Visible, True) +
+                ', Height: ' + IntToStr(Result.Height));
 
         if Result.Visible and (Result.Height > 0) then
           Exit;
@@ -318,18 +327,18 @@ begin
 
     if Result = nil then
     begin
-      DebugLog('No suitable toolbar found, creating new one');
+      DebugLn('[TCodeAnalyzerPlugin] No suitable toolbar found, creating new one');
       Result := TToolBar.Create(EditorForm);
       Result.Parent := EditorForm;
       Result.Height := 26;
       Result.Align := alTop;
       Result.Visible := True;
-      DebugLog('Created new toolbar in editor form');
+      DebugLn('[TCodeAnalyzerPlugin] Created new toolbar in editor form');
     end;
 
   except
     on E: Exception do
-      DebugLog('Error in FindEditorToolbar: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in FindEditorToolbar: ' + E.Message);
   end;
 end;
 
@@ -391,7 +400,7 @@ begin
             SynEdit.TopLine := Max(1, Line - 5);
             SynEdit.SetFocus;
             FLastCursorLine := Line;
-            DebugLog('Jumped to method: ' + FMethods[I].Name + ' at line ' + IntToStr(Line));
+            DebugLn('[TCodeAnalyzerPlugin] Jumped to method: ' + FMethods[I].Name + ' at line ' + IntToStr(Line));
           end;
           Break;
         end;
@@ -399,7 +408,7 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in ComboBoxChange: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in ComboBoxChange: ' + E.Message);
   end;
 end;
 
@@ -435,7 +444,7 @@ begin
     Result := BestMatch;
   except
     on E: Exception do
-      DebugLog('Error in GetCurrentMethodIndex: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in GetCurrentMethodIndex: ' + E.Message);
   end;
 end;
 
@@ -462,16 +471,16 @@ begin
       try
         FComboBox.ItemIndex := ComboIndex;
         if CurrentMethodIndex >= 0 then
-          DebugLog('Auto-selected method: ' + FMethods[CurrentMethodIndex].Name)
+          DebugLn('[TCodeAnalyzerPlugin] Auto-selected method: ' + FMethods[CurrentMethodIndex].Name)
         else
-          DebugLog('No method selected - cursor outside methods');
+          DebugLn('[TCodeAnalyzerPlugin] No method selected - cursor outside methods');
       finally
         FUpdatingCombo := False;
       end;
     end;
   except
     on E: Exception do
-      DebugLog('Error in UpdateComboSelection: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in UpdateComboSelection: ' + E.Message);
   end;
 end;
 
@@ -497,7 +506,7 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in OnCursorPosChanged: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in OnCursorPosChanged: ' + E.Message);
   end;
 end;
 
@@ -537,7 +546,7 @@ begin
     end;
 
     FileName := GetCurrentFileName;
-    DebugLog('Updating methods for: ' + ExtractFileName(FileName));
+    DebugLn('[TCodeAnalyzerPlugin] Updating methods for: ' + ExtractFileName(FileName));
 
     if not (LowerCase(ExtractFileExt(FileName)) = '.pas') then
     begin
@@ -550,7 +559,7 @@ begin
     CodeBuffer := CodeToolBoss.FindFile(FileName);
     if CodeBuffer = nil then
     begin
-      DebugLog('CodeBuffer not found for: ' + FileName);
+      DebugLn('[TCodeAnalyzerPlugin] CodeBuffer not found for: ' + FileName);
       FComboBox.Items.Add('(Parse error)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
@@ -559,7 +568,7 @@ begin
 
     if not CodeToolBoss.Explore(CodeBuffer, Tool, False) then
     begin
-      DebugLog('Failed to explore code for: ' + FileName);
+      DebugLn('[TCodeAnalyzerPlugin] Failed to explore code for: ' + FileName);
       FComboBox.Items.Add('(Analysis failed)');
       FComboBox.ItemIndex := 0;
       FProcessing := False;
@@ -600,12 +609,12 @@ begin
 
     UpdateComboSelection;
 
-    DebugLog('UpdateMethods completed. Found ' + IntToStr(FStoredMethods.Count) + ' methods');
+    DebugLn('[TCodeAnalyzerPlugin] UpdateMethods completed. Found ' + IntToStr(FStoredMethods.Count) + ' methods');
     FProcessing := False;
   except
     on E: Exception do
     begin
-      DebugLog('Error in UpdateMethods: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in UpdateMethods: ' + E.Message);
       FProcessing := False;
     end;
   end;
@@ -624,7 +633,7 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in PositionToLine: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in PositionToLine: ' + E.Message);
   end;
 end;
 
@@ -637,7 +646,7 @@ begin
     if not IsValidEditor(NewEditor) then
       Exit;
 
-    DebugLog('OnEditorOpened: ' + ExtractFileName(NewEditor.FileName));
+    DebugLn('[TCodeAnalyzerPlugin] OnEditorOpened: ' + ExtractFileName(NewEditor.FileName));
 
     if not FComboCreated then
     begin
@@ -648,17 +657,17 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in OnEditorOpened: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in OnEditorOpened: ' + E.Message);
   end;
 end;
 
 procedure TCodeAnalyzerPlugin.OnEditorDestroy(Sender: TObject);
 begin
   try
-    DebugLog('OnEditorDestroy called');
+    DebugLn('[TCodeAnalyzerPlugin] OnEditorDestroy called');
   except
     on E: Exception do
-      DebugLog('Error in OnEditorDestroy: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in OnEditorDestroy: ' + E.Message);
   end;
 end;
 
@@ -674,7 +683,7 @@ begin
       FCurrentEditor := NewEditor;
       if IsValidEditor(FCurrentEditor) then
       begin
-        DebugLog('OnEditorActivated: ' + ExtractFileName(FCurrentEditor.FileName));
+        DebugLn('[TCodeAnalyzerPlugin] OnEditorActivated: ' + ExtractFileName(FCurrentEditor.FileName));
 
         if not FComboCreated then
           CreateComboOnce;
@@ -684,7 +693,7 @@ begin
       end
       else
       begin
-        DebugLog('OnEditorActivated: No valid editor');
+        DebugLn('[TCodeAnalyzerPlugin] OnEditorActivated: No valid editor');
         if FComboBox <> nil then
         begin
           FComboBox.Items.Clear;
@@ -695,19 +704,19 @@ begin
     end;
   except
     on E: Exception do
-      DebugLog('Error in OnEditorActivated: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error in OnEditorActivated: ' + E.Message);
   end;
 end;
 
 procedure Register;
 begin
   try
-    DebugLog('Registering CodeAnalyzerPlugin');
+    DebugLn('[TCodeAnalyzerPlugin] Registering CodeAnalyzerPlugin');
     if aCodeAnalyzerPlugin = nil then
       aCodeAnalyzerPlugin := TCodeAnalyzerPlugin.Create;
   except
     on E: Exception do
-      DebugLog('Error registering plugin: ' + E.Message);
+      DebugLn('[TCodeAnalyzerPlugin] Error registering plugin: ' + E.Message);
   end;
 end;
 
