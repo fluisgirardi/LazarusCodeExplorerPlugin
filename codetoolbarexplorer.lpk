@@ -3,7 +3,7 @@
   <Package Version="5">
     <PathDelim Value="\"/>
     <Name Value="CodeToolbarExplorer"/>
-    <Type Value="RunAndDesignTime"/>
+    <Type Value="DesignTime"/>
     <Author Value="Anderson Fiori"/>
     <CompilerOptions>
       <Version Value="11"/>
