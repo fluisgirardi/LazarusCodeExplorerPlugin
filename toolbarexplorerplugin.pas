@@ -8,7 +8,7 @@ uses
   Classes, SysUtils, Controls, Forms, StdCtrls, ExtCtrls, ComCtrls,
   LazIDEIntf, IDEIntf, LazLoggerBase, Graphics, Dialogs, SynEdit, SynEditTypes,
   CodeToolManager, CodeTree, CodeCache, PascalParserTool, MenuIntf,
-  SrcEditorIntf, Math;
+  SrcEditorIntf, Math, FileUtil, LazFileUtils;
 
 procedure Register;
 
@@ -548,7 +548,7 @@ begin
     FileName := GetCurrentFileName;
     DebugLn('[TCodeAnalyzerPlugin] Updating methods for: ' + ExtractFileName(FileName));
 
-    if not (LowerCase(ExtractFileExt(FileName)) = '.pas') then
+    if not FilenameExtIn(FileName, PascalSourceExt) then
     begin
       FComboBox.Items.Add('(Not Pascal file)');
       FComboBox.ItemIndex := 0;
