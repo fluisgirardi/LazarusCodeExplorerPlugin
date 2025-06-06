@@ -2,8 +2,8 @@
 <CONFIG>
   <Package Version="5">
     <PathDelim Value="\"/>
-    <Name Value="codetoolbarexplorer"/>
-    <Type Value="RunAndDesignTime"/>
+    <Name Value="CodeToolbarExplorer"/>
+    <Type Value="DesignTime"/>
     <Author Value="Anderson Fiori"/>
     <CompilerOptions>
       <Version Value="11"/>
@@ -11,6 +11,9 @@
       <SearchPaths>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Other>
+        <CustomOptions Value="$(IDEBuildOptions)"/>
+      </Other>
     </CompilerOptions>
     <License Value="MIT License"/>
     <Files>
